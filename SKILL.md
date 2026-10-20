@@ -1,9 +1,9 @@
 ---
 name: powershell-script-fixer
-version: 1.3.1
+version: 1.3.2
 category: ops
 author: YG
-description: PowerShell 脚本语法预检与全角标点/不可见字符自愈工具链，专治 AI 生成脚本的 ParseError、静默丢输出与编码破坏，附带 49 例边界回归套件。
+description: PowerShell 脚本语法预检与全角标点/不可见字符自愈工具链，专治 AI 生成脚本的 ParseError、把 > 误当比较的静默丢输出与编码破坏；58 例回归（49+9），支持 -AsJson、一键闭环与发布自检。
 whenToUse: 当需要检查、修复或验收 AI 生成的 .ps1/.psm1 脚本时调用；典型触发为「ps1 报错」「Unexpected token」「全角标点」「脚本跑不出结果但 exit 0」「脚本中文乱码」「先 lint 再执行」。
 tags:
   - powershell
