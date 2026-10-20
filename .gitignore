@@ -1,0 +1,18 @@
+# 分发产物（走 Release 附件，不进仓库）
+dist/
+*.zip
+
+# 修复工具的备份文件
+*.bak
+*.bak-*
+
+# 回归套件的临时工作区（-Keep 时会留下）
+guard-test-*/
+ps-tools-test-*/
+
+# 编辑器 / 系统噪音
+.vscode/
+.idea/
+*.swp
+Thumbs.db
+desktop.ini

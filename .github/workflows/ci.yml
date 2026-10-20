@@ -1,0 +1,69 @@
+name: ci
+
+on:
+  push:
+    branches: [main, master]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  # Windows 是主战场：全部 58 例（49 + 9）都在 pwsh 7.6.5 / Windows 上实测过
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 打印 pwsh 版本
+        shell: pwsh
+        run: $PSVersionTable.PSVersion.ToString()
+
+      - name: 发布规范自检（SKILL.md Frontmatter + 正文结构）
+        shell: pwsh
+        run: ./scripts/validate-skill.ps1
+
+      - name: 包内脚本语法门禁
+        shell: pwsh
+        run: |
+          $files = @(Get-ChildItem ./scripts -Filter *.ps1 | ForEach-Object { $_.FullName })
+          ./scripts/ps-lint.ps1 @files
+
+      - name: 回归 / 循环初版（49 例）
+        shell: pwsh
+        run: ./scripts/test-ps-tools.ps1
+
+      - name: 回归 / 一条命令闭环（9 例）
+        shell: pwsh
+        run: ./scripts/test-guard.ps1
+
+      - name: 打发布包
+        shell: pwsh
+        run: |
+          $ver = (Select-String -Path ./SKILL.md -Pattern '^version:\s*(.+)$').Matches[0].Groups[1].Value.Trim()
+          New-Item -ItemType Directory -Force -Path ./dist | Out-Null
+          Compress-Archive -Path ./* -DestinationPath "./dist/powershell-script-fixer-$ver.zip" -Force
+          Write-Host "built dist/powershell-script-fixer-$ver.zip"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: skill-package
+          path: dist/*.zip
+          if-no-files-found: error
+
+  # Linux/macOS 尚未在本地实测，先以 continue-on-error 观测，稳定后转成硬门禁
+  linux:
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: 版本
+        run: pwsh -NoProfile -Command '$PSVersionTable.PSVersion.ToString()'
+      - name: 回归 / 49 例
+        run: pwsh -NoProfile -File ./scripts/test-ps-tools.ps1
+      - name: 回归 / 9 例
+        run: pwsh -NoProfile -File ./scripts/test-guard.ps1
