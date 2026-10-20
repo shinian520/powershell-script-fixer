@@ -1,0 +1,5 @@
+# patches/bundle.yaml
+# DeepSeek Harness 客户端 Bundle Patch 声明文件。
+# 本包不侵入修改客户端核心代码：真正的能力在 SKILL.md（技能）与 scripts/*.ps1（工具链），
+# 因此保留标准空列表即可。市场从仓库导入插件时会校验该文件真实存在。
+[]

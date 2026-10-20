@@ -104,6 +104,25 @@ Stop 试跑：`pwsh -NoProfile -Command "$ErrorActionPreference='Stop'; & 'scrip
 
 `ps-lint` 返回 0 ≠ 能跑：`if ($a == $b)`、`// 注释`、`Get-ChildItem($p)`、JS 模板串，以及紧邻中文文案的全角标点都不在射程内，需靠 Stop 试跑与人工审读兜住。完整清单见 `references/known-blindspots.md`。
 
+## 双形态：Skill + 插件壳
+
+DeepSeek 市场从 **GitHub 仓库导入**时按「插件」校验，要求所选目录含真实的 `package.json`（名称 + 精确版本），
+monorepo 还要指定子目录。本仓库因此做成两种形态共存，两种导入方式都能过：
+
+| 形态 | 入口文件 | 说明 |
+| --- | --- | --- |
+| Skill | `SKILL.md` | 真正的能力描述与工作流，模型自主唤醒后按它执行 |
+| 插件壳 | `package.json` + `lib/index.js` + `patches/bundle.yaml` | 只做登记（`psfix:version`），不注册拦截器、不改客户端行为 |
+
+```
+package.json                 # name=powershell-script-fixer  version=1.0.0（必须与 SKILL.md 一致）
+patches/bundle.yaml          # 标准空列表 []：不侵入客户端核心
+lib/index.js                 # 纯 JS 入口，无需构建
+```
+
+**版本必须三处同源**：`SKILL.md` 的 `version`、`package.json` 的 `version`、git tag。`scripts\validate-skill.ps1`
+会做一致性校验（版本不一致直接判不合规），CI 里还有独立一道 `node --check` + 版本对齐检查。
+
 ## 兼容性
 
 - **PowerShell 7+**（脚本内运行时门禁）。用 5.1 调用会打印 `需要 PowerShell 7+` 并 **exit 2** —— 这是环境问题，不是脚本语法错误，别按 1 处理。

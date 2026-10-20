@@ -22,9 +22,22 @@ jobs:
         shell: pwsh
         run: $PSVersionTable.PSVersion.ToString()
 
-      - name: 发布规范自检（SKILL.md Frontmatter + 正文结构）
+      - name: 发布规范自检（SKILL.md Frontmatter + 正文结构 + 插件壳）
         shell: pwsh
         run: ./scripts/validate-skill.ps1
+
+      - name: 插件壳校验（package.json / main / bundle.patch / 版本对齐）
+        shell: pwsh
+        run: |
+          $pj = Get-Content ./package.json -Raw | ConvertFrom-Json
+          if (-not $pj.name) { throw 'package.json 缺少 name' }
+          if ($pj.version -notmatch '^\d+\.\d+\.\d+$') { throw "version 必须是精确 SemVer: $($pj.version)" }
+          $ver = (Select-String -Path ./SKILL.md -Pattern '^version:\s*(.+)$').Matches[0].Groups[1].Value.Trim()
+          if ($pj.version -ne $ver) { throw "版本不一致：SKILL.md=$ver / package.json=$($pj.version)" }
+          if (-not (Test-Path -LiteralPath $pj.main)) { throw "main 指向不存在的文件: $($pj.main)" }
+          if (-not (Test-Path -LiteralPath $pj.dsh.bundle.patch)) { throw "dsh.bundle.patch 不存在: $($pj.dsh.bundle.patch)" }
+          node --check ./lib/index.js
+          Write-Host "plugin shell OK: $($pj.name)@$($pj.version)"
 
       - name: 包内脚本语法门禁
         shell: pwsh
@@ -47,7 +60,7 @@ jobs:
           New-Item -ItemType Directory -Force -Path ./dist | Out-Null
           # 只列要发的条目：不能压 ./*，否则会把 .git 与正在写入的 dist 一起卷进去
           # （实测报 "The process cannot access the file ... because it is being used by another process"）
-          $items = @('./SKILL.md', './README.md', './LICENSE', './.gitattributes', './.gitignore', './scripts', './references', './.github')
+          $items = @('./SKILL.md', './README.md', './LICENSE', './package.json', './.gitattributes', './.gitignore', './scripts', './references', './patches', './lib', './.github')
           $zipPath = "./dist/powershell-script-fixer-$ver.zip"
           Compress-Archive -Path $items -DestinationPath $zipPath -Force
           Add-Type -AssemblyName System.IO.Compression.FileSystem

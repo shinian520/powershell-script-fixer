@@ -1,4 +1,4 @@
-﻿<#
+<#
 .SYNOPSIS
     发布前自检：校验 SKILL.md 的 YAML Frontmatter 与正文必备小节。
 .DESCRIPTION
@@ -116,6 +116,42 @@ $required = @(
 foreach ($r in $required) {
     if ($bodyText -match $r.Pattern) { $passes.Add("正文含 $($r.Label)") }
     else { $problems.Add("正文缺少小节 $($r.Label)") }
+}
+
+# 2.5) 若仓库同时带插件壳（package.json），按插件规范校验，并强制与 SKILL.md 版本一致
+#      市场从仓库导入时按"插件"校验：要求根目录有真实 package.json（名称 + 精确版本），
+#      monorepo 还需指定子目录。缺版本对齐会直接被拒。
+$skillVersion = if ($fields -and $fields.ContainsKey('version')) { $fields['version'] } else { $null }
+$skillRoot = Split-Path -Parent $SkillMd
+$pkgJson = Join-Path $skillRoot 'package.json'
+if (Test-Path -LiteralPath $pkgJson) {
+    $pj = $null
+    try { $pj = Get-Content -LiteralPath $pkgJson -Raw | ConvertFrom-Json } catch { $problems.Add("package.json 不是合法 JSON: $($_.Exception.Message)") }
+    if ($pj) {
+        if ($pj.name -cmatch '^[a-z0-9]+(-[a-z0-9]+)*$') { $passes.Add("package.json name 合法: $($pj.name)") }
+        else { $problems.Add("package.json name 必须全小写字母/数字/中划线: '$($pj.name)'") }
+
+        if ($pj.version -match '^\d+\.\d+\.\d+$') { $passes.Add("package.json version 为精确 SemVer: $($pj.version)") }
+        else { $problems.Add("package.json version 必须是精确 SemVer（不能带 v 前缀或用范围）: '$($pj.version)'") }
+
+        if ($skillVersion) {
+            if ($pj.version -ne $skillVersion) {
+                $problems.Add("版本不一致：SKILL.md=$skillVersion / package.json=$($pj.version)")
+            } else {
+                $passes.Add("SKILL.md 与 package.json 版本一致: $skillVersion")
+            }
+        }
+
+        $mainRel = [string]$pj.main
+        if ($mainRel -and (Test-Path -LiteralPath (Join-Path $skillRoot $mainRel))) { $passes.Add("main 指向真实入口: $mainRel") }
+        else { $problems.Add("package.json main 指向不存在的文件: '$mainRel'") }
+
+        $patchRel = [string]$pj.dsh.bundle.patch
+        if ($patchRel -and (Test-Path -LiteralPath (Join-Path $skillRoot $patchRel))) { $passes.Add("dsh.bundle.patch 存在: $patchRel") }
+        else { $problems.Add("缺少 dsh.bundle.patch 或文件不存在: '$patchRel'（插件壳必需）") }
+    }
+} else {
+    $passes.Add('未提供 package.json（纯 Skill 形态，跳过插件校验）')
 }
 
 $ok = $problems.Count -eq 0
