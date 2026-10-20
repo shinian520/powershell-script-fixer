@@ -1,4 +1,4 @@
-﻿<#
+<#
 .SYNOPSIS
     把本技能安装/更新到 .dsh/skills，自动解 MOTW 并做安装位自检。
 .DESCRIPTION
@@ -63,6 +63,11 @@ try {
     if (Test-Path -LiteralPath $target) { Remove-Item -LiteralPath $target -Recurse -Force }
     New-Item -ItemType Directory -Force -Path $Destination | Out-Null
     Copy-Item -LiteralPath $skillRoot -Destination $target -Recurse -Force
+    # 客户端只需要 Skill 那套文件：仓库专用目录不装进去
+    foreach ($skip in @('plugin-shell', '.git', 'dist', '.github')) {
+        $sp = Join-Path $target $skip
+        if (Test-Path -LiteralPath $sp) { Remove-Item -LiteralPath $sp -Recurse -Force }
+    }
 } catch {
     Write-Host "ERROR: 安装失败 - $($_.Exception.Message)"
     exit 2

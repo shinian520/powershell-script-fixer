@@ -104,24 +104,26 @@ Stop 试跑：`pwsh -NoProfile -Command "$ErrorActionPreference='Stop'; & 'scrip
 
 `ps-lint` 返回 0 ≠ 能跑：`if ($a == $b)`、`// 注释`、`Get-ChildItem($p)`、JS 模板串，以及紧邻中文文案的全角标点都不在射程内，需靠 Stop 试跑与人工审读兜住。完整清单见 `references/known-blindspots.md`。
 
-## 双形态：Skill + 插件壳
+## 发布形态：纯 Skill（插件壳可选）
 
-DeepSeek 市场从 **GitHub 仓库导入**时按「插件」校验，要求所选目录含真实的 `package.json`（名称 + 精确版本），
-monorepo 还要指定子目录。本仓库因此做成两种形态共存，两种导入方式都能过：
+市场按**所选目录**判定形态，看的是那个目录里有什么文件：
 
-| 形态 | 入口文件 | 说明 |
+| 目录 | 含什么 | 会被判成 |
 | --- | --- | --- |
-| Skill | `SKILL.md` | 真正的能力描述与工作流，模型自主唤醒后按它执行 |
-| 插件壳 | `package.json` + `lib/index.js` + `patches/bundle.yaml` | 只做登记（`psfix:version`），不注册拦截器、不改客户端行为 |
+| 仓库根（默认） | `SKILL.md` + `scripts/` + `references/`，**没有** `package.json` | **Skill** ✔ 推荐 |
+| `plugin-shell/` | `package.json` + `lib/index.js` + `patches/bundle.yaml` | 插件（仅在插件通道需要时用它当子目录） |
+
+所以根目录刻意不放 `package.json` —— 一旦放上去，市场就把条目建成插件，并在 Skill 通道报
+`所选目录需要包含真实插件 package.json`。要发 Skill 就**别在根目录放包清单**。
 
 ```
-package.json                 # name=powershell-script-fixer  version=1.0.0（必须与 SKILL.md 一致）
-patches/bundle.yaml          # 标准空列表 []：不侵入客户端核心
-lib/index.js                 # 纯 JS 入口，无需构建
+SKILL.md                     # 技能入口（市场解析 Frontmatter）
+scripts/                     # 工具链
+references/                  # 盲区与回灌模板
+plugin-shell/                # 可选：薄插件壳，不参与 Skill 发布
 ```
 
-**版本必须三处同源**：`SKILL.md` 的 `version`、`package.json` 的 `version`、git tag。`scripts\validate-skill.ps1`
-会做一致性校验（版本不一致直接判不合规），CI 里还有独立一道 `node --check` + 版本对齐检查。
+可选插件壳里 `package.json` 的 `version` 必须与根 `SKILL.md` 一致（`validate-skill.ps1` 与 CI 都会校验，不一致直接判不合规）。
 
 ## 兼容性
 
