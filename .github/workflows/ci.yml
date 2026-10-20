@@ -45,8 +45,17 @@ jobs:
         run: |
           $ver = (Select-String -Path ./SKILL.md -Pattern '^version:\s*(.+)$').Matches[0].Groups[1].Value.Trim()
           New-Item -ItemType Directory -Force -Path ./dist | Out-Null
-          Compress-Archive -Path ./* -DestinationPath "./dist/powershell-script-fixer-$ver.zip" -Force
-          Write-Host "built dist/powershell-script-fixer-$ver.zip"
+          # 只列要发的条目：不能压 ./*，否则会把 .git 与正在写入的 dist 一起卷进去
+          # （实测报 "The process cannot access the file ... because it is being used by another process"）
+          $items = @('./SKILL.md', './README.md', './LICENSE', './.gitattributes', './.gitignore', './scripts', './references', './.github')
+          $zipPath = "./dist/powershell-script-fixer-$ver.zip"
+          Compress-Archive -Path $items -DestinationPath $zipPath -Force
+          Add-Type -AssemblyName System.IO.Compression.FileSystem
+          $z = [IO.Compression.ZipFile]::OpenRead((Resolve-Path $zipPath).Path)
+          $names = @($z.Entries.FullName)
+          $z.Dispose()
+          if ($names -notcontains 'SKILL.md') { throw 'SKILL.md 必须在 ZIP 根目录（市场解析要求）' }
+          Write-Host "built $zipPath ($($names.Count) entries)"
 
       - uses: actions/upload-artifact@v4
         with:

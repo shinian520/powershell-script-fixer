@@ -15,7 +15,7 @@ test-ps-tools.ps1 - ps-lint / fix-ps-punct 边界测试套件
 param(
     [string]$Case,
     [switch]$Keep,
-    [string]$WorkDir = (Join-Path $env:TEMP 'ps-tools-test'),
+    [string]$WorkDir = (Join-Path ([IO.Path]::GetTempPath()) 'ps-tools-test'),
     [string]$Lint = (Join-Path $PSScriptRoot 'ps-lint.ps1'),
     [string]$Fix = (Join-Path $PSScriptRoot 'fix-ps-punct.ps1')
 )
@@ -353,12 +353,12 @@ New-Case 'fix-20 已存在的 .bak 不得被覆盖' {
     Assert-True (@([IO.Directory]::GetFiles($Work, 'fix_bak.ps1.bak*')).Count -ge 2) '应另存一份带时间戳的备份'
     Assert-True ($r.Out.Contains('.bak-')) "输出应给出实际备份名: $($r.Out)"
 }
-New-Case 'suite-01 -Case 无匹配必须非 0（防空跑变绿）' {    $r = Invoke-Tool $PSCommandPath @('-Case', 'zzz-not-a-case', '-WorkDir', (Join-Path $env:TEMP 'ps-tools-test-selfcheck1'), '-Lint', $Lint, '-Fix', $Fix)
+New-Case 'suite-01 -Case 无匹配必须非 0（防空跑变绿）' {    $r = Invoke-Tool $PSCommandPath @('-Case', 'zzz-not-a-case', '-WorkDir', (Join-Path ([IO.Path]::GetTempPath()) 'ps-tools-test-selfcheck1'), '-Lint', $Lint, '-Fix', $Fix)
     Assert-True ($r.Exit -ne 0) "-Case 打错字时 exit=$($r.Exit)，0 通过 0 失败不能算通过: $($r.Out)"
 }
 New-Case 'suite-02 工具缺失时整套件必须非 0（防负向断言空过）' {
     $fake = Join-Path $Work 'absent-tool.ps1'
-    $r = Invoke-Tool $PSCommandPath @('-Lint', $fake, '-Fix', $fake, '-Case', 'lint-01', '-WorkDir', (Join-Path $env:TEMP 'ps-tools-test-selfcheck2'), '-Keep')
+    $r = Invoke-Tool $PSCommandPath @('-Lint', $fake, '-Fix', $fake, '-Case', 'lint-01', '-WorkDir', (Join-Path ([IO.Path]::GetTempPath()) 'ps-tools-test-selfcheck2'), '-Keep')
     Assert-True ($r.Exit -ne 0) "被测工具不存在时 exit=$($r.Exit)（曾出现工具缺席仍报 PASS）: $($r.Out)"
 }
 

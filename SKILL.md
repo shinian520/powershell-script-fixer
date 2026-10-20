@@ -1,6 +1,6 @@
 ---
 name: powershell-script-fixer
-version: 1.3.0
+version: 1.3.1
 category: ops
 author: YG
 description: PowerShell 脚本语法预检与全角标点/不可见字符自愈工具链，专治 AI 生成脚本的 ParseError、静默丢输出与编码破坏，附带 49 例边界回归套件。
