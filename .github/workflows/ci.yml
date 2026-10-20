@@ -63,10 +63,9 @@ jobs:
           path: dist/*.zip
           if-no-files-found: error
 
-  # Linux/macOS 尚未在本地实测，先以 continue-on-error 观测，稳定后转成硬门禁
+  # Linux 已验证通过（ubuntu-latest + pwsh，2026-10-20 起为硬门禁）
   linux:
     runs-on: ubuntu-latest
-    continue-on-error: true
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
