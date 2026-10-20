@@ -31,7 +31,7 @@
 11. **全角比较符修复后必然落到第 10 条上（实测闭环）**：`if ($n ＞ 0)` 经同形映射成 `if ($n > 0)`
     语法合法，但复检 `ps-lint` 报 `3 WARN`（`[> 0] 请改用 -gt`）。所以全角 `＞ ＜` 的修复必须连带把
     运算符换成 `-gt/-ge/-lt/-le`，两道都过才算修好；只跑 `fix-ps-punct` 就宣布完成是错的。
-12. **子进程起不来 → 假通过（v1.2.1 已修，务必别改回去）**：`ps-guard` 原先用 `& pwsh` 调子工具，
+12. **子进程起不来 → 假通过（公开版 1.0.0 已修，务必别改回去）**：`ps-guard` 原先用 `& pwsh` 调子工具，
     在 PATH 不含 pwsh 的受限账户/精简容器里会抛 `CommandNotFoundException`、**而 `$LASTEXITCODE` 残留旧值 0**，
     于是被判成"语法干净、通过"。实测（清空 PATH 后）修复前输出 `OK: 语法干净`、退出码 0。
     现在改为从 `[Diagnostics.Process]::GetCurrentProcess().MainModule.FileName` 取当前引擎自身路径，
@@ -91,6 +91,8 @@
 
 ## 六、版本沿革
 
+> 公开发布统一从 **1.0.0** 起编号；下面保留发布前内部迭代记录，序号不代表公开发布版本，技术结论全部有效。
+
 - **2026-09-29（第三轮，符号比较工具化）**：`ps-lint` 新增 AST 级符号比较检出（新增退出码 3 = WARN，
   `-AsJson` 增 `Warnings` 字段）；修掉两工具共有的"多文件取最严重被实现成比退出码大小"的优先级 bug；
   套件 43 → 49 例。
@@ -101,7 +103,7 @@
   套件 23 → 43 例。
 - **2026-09-29（第一轮，缺陷修复）**：`ps-lint` 单行文件崩溃（`Get-Content` 返回标量导致 `$lines[$n]` 是 Char，
   `.TrimEnd()` 抛异常并吞掉后续错误条目）；写回不再统一成 UTF-8 无 BOM；备份不再覆盖同名 `.bak`。
-15. **必须带 UTF-8 BOM（v1.3.0 推翻旧结论）**：早期两脚本刻意不加 BOM（只为消掉 PSScriptAnalyzer 的
+15. **必须带 UTF-8 BOM（公开版 1.0.0 推翻旧结论）**：早期两脚本刻意不加 BOM（只为消掉 PSScriptAnalyzer 的
     `PSUseBOMForUnicodeEncodedFile` 建议），代价是 Windows PowerShell 5.1 把无 BOM 的 UTF-8 当 ANSI/GBK 解码，
     中文注释变乱码 → **解析阶段就报 `Unexpected token`**，退出码 1，与"真语法错"完全无法区分（实测 9/9 脚本中招）。
     现在全部脚本改为 UTF-8 **带** BOM：5.1 能正确解析，于是运行时版本门禁可以干净地 `exit 2`；

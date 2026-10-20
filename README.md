@@ -123,7 +123,7 @@ Stop 试跑：`pwsh -NoProfile -Command "$ErrorActionPreference='Stop'; & 'scrip
 cd powershell-script-fixer
 git init -b main
 git add -A
-git commit -m "feat: powershell-script-fixer v1.2.0"
+git commit -m "feat: powershell-script-fixer v1.0.0"
 
 # 1) 提交前门禁（拦住带语法错/符号比较的脚本）
 pwsh scripts\install-hooks.ps1          # 装；-Uninstall 卸
@@ -132,10 +132,10 @@ pwsh scripts\install-hooks.ps1          # 装；-Uninstall 卸
 pwsh scripts\validate-skill.ps1          # 14 项检查，exit 0 才上传
 
 # 3) 版本与发布
-git tag v1.2.0
+git tag v1.0.0
 git push origin main --tags
-pwsh -NoProfile -c "Compress-Archive -Path ./* -DestinationPath ./dist/powershell-script-fixer-v1.2.0.zip -Force"
-gh release create v1.2.0 ./dist/powershell-script-fixer-v1.2.0.zip
+pwsh -NoProfile -c "Compress-Archive -Path ./SKILL.md,./README.md,./LICENSE,./scripts,./references -DestinationPath ./dist/powershell-script-fixer-v1.0.0.zip -Force"  # 不要用 ./*：会把 .git 与正在写入的 dist 一起打包
+gh release create v1.0.0 ./dist/powershell-script-fixer-v1.0.0.zip
 ```
 
 - **市场发布**：技能市场支持从 GitHub 仓库直接导入（公开仓库），版本走 tag，比每次手传 zip 可回溯；`dist/*.zip` 只作为 Release 附件。

@@ -1,6 +1,6 @@
 ---
 name: powershell-script-fixer
-version: 1.3.2
+version: 1.0.0
 category: ops
 author: YG
 description: PowerShell 脚本语法预检与全角标点/不可见字符自愈工具链，专治 AI 生成脚本的 ParseError、把 > 误当比较的静默丢输出与编码破坏；58 例回归（49+9），支持 -AsJson、一键闭环与发布自检。
@@ -143,7 +143,7 @@ pwsh <SKILL_DIR>\scripts\test-ps-tools.ps1 -Case fix    # 只跑名字含 fix �
 8. `PARTIAL` 的行列来自"假设已改好"的文本（磁盘上仍是原件），回灌时必须连同原文一起给。
 9. **只在 PowerShell 7+ 上成立**：脚本内做了运行时版本门禁，用 Windows PowerShell 5.1 运行会打印
    `ERROR: 需要 PowerShell 7+，当前 5.1.x。这是调用环境问题（exit 2），不是脚本语法错误。` 并 **exit 2**。
-   （v1.3.0 起不再用 `#Requires -Version 7`：那条语句会让 5.1 以 exit 1 中止，与"有语法错误"撞码，
+   （公开发布起不再用 `#Requires -Version 7`：那条语句会让 5.1 以 exit 1 中止，与"有语法错误"撞码，
    CI 分不清"环境不对"和"脚本写错"。）前提是脚本文件必须带 UTF-8 BOM，否则 5.1 会按 ANSI 解码中文注释、
    在解析阶段就失败，连门禁都跑不到。
 10. **调用形态影响退出码**：只信任 `pwsh -File <脚本>`；包成 `pwsh -Command "& <脚本>; 后续"` 时脚本内的 `exit` 可能被吞。
