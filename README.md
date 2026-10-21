@@ -1,10 +1,13 @@
 # PowerShell 脚本质检修复（powershell-script-fixer）
 
 > **PowerShell script lint & full-width punctuation auto-fixer** — a DeepSeek Harness Skill.
+> **Scope: only the runtime problems of AI-generated / AI-executed PowerShell** (files and inline statements).
+> No plugin/module/Action packaging, and no judgment about business logic.
 > Catches `ParseError`s, the silent `>`-as-redirection trap, invisible chars; auto-fixes full-width punctuation
-> with a real-tokenizer protection zone; 49 + 9 regression cases; byte-exact encoding preservation.
+> with a real-tokenizer protection zone; 49 + 9 + 8 regression cases; inline statements supported; byte-exact encoding preservation.
 
-DeepSeek Harness 原生技能（Skill）包。专治 **AI 生成的 PowerShell 脚本**三类问题：
+DeepSeek Harness 原生技能（Skill）包。**范围限定：只修 AI 生成或直接执行的 PowerShell 脚本/语句的运行期问题**，
+不判断业务逻辑对错（那需要规格），也不做插件/模块/Action 等通用发布形态。专治三类问题：
 
 1. **语法错**：全角逗号/冒号/括号/引号、缺逗号、多冒号 → `Unexpected token '，'`。
 2. **静默失败**：`if ($x > 0)` 把 `>` 当重定向 —— 分支输出被丢弃、磁盘多出名为 `0` 的怪文件，而进程 `exit 0`。
@@ -28,11 +31,12 @@ powershell-script-fixer/
 │   ├── pre-commit.ps1                    # 提交前门禁：暂存脚本必须过 ps-lint
 │   ├── install-hooks.ps1                 # 把上面的门禁装进当前 git 仓库（可 -Uninstall）
 │   ├── test-ps-tools.ps1                 # 49 例 lint/fix 边界回归
-│   └── test-guard.ps1                    # 9 例 ps-guard 行为回归
+│   ├── test-guard.ps1                    # 9 例 ps-guard 行为回归
+│   └── test-inline.ps1                   # 8 例 -Inline / 标准输入回归
 ├── references/
 │   ├── known-blindspots.md               # 盲区、踩坑、编码规则、退出码、回归覆盖、版本沿革
 │   └── error-feedback-prompt.md          # 报错回灌模板 + 报错对照表 + 提示词硬规则
-├── .github/workflows/ci.yml              # CI：规范自检 + 58 例回归 + 产包上传
+├── .github/workflows/ci.yml              # CI：规范自检 + 66 例回归 + 产包上传
 ├── .gitattributes                        # `* -text`：禁止换行归一化（保字节级编码依据）
 └── .gitignore                            # dist/、*.bak、测试临时区
 ```
@@ -63,6 +67,11 @@ pwsh $S\fix-ps-punct.ps1 script.ps1         # 仅在文件已报语法错时动�
 pwsh $S\fix-ps-punct.ps1 script.ps1 -All    # 语法合法也修（＄x = 1、＂found＂、$a = 1，2）
 pwsh $S\test-ps-tools.ps1                   # 49 例回归，约 50s，exit 0 = 通过
 pwsh $S\test-guard.ps1                      # 9 例 guard 回归，约 15s
+pwsh $S\test-inline.ps1                     # 8 例 -Inline / stdin 回归，约 10s
+
+# 语句形态（AI 直接执行、不落盘）
+pwsh $S\ps-guard.ps1 -Inline 'if ($n > 0) { "x" }' -Verify
+$stmt | pwsh $S\ps-guard.ps1 -Inline -      # 管道输入，按字节 UTF-8 解码（中文安全）
 ```
 
 ## 推荐闭环
@@ -104,26 +113,26 @@ Stop 试跑：`pwsh -NoProfile -Command "$ErrorActionPreference='Stop'; & 'scrip
 
 `ps-lint` 返回 0 ≠ 能跑：`if ($a == $b)`、`// 注释`、`Get-ChildItem($p)`、JS 模板串，以及紧邻中文文案的全角标点都不在射程内，需靠 Stop 试跑与人工审读兜住。完整清单见 `references/known-blindspots.md`。
 
-## 发布形态：纯 Skill（插件壳可选）
+## 范围与形态
 
-市场按**所选目录**判定形态，看的是那个目录里有什么文件：
-
-| 目录 | 含什么 | 会被判成 |
-| --- | --- | --- |
-| 仓库根（默认） | `SKILL.md` + `scripts/` + `references/`，**没有** `package.json` | **Skill** ✔ 推荐 |
-| `plugin-shell/` | `package.json` + `lib/index.js` + `patches/bundle.yaml` | 插件（仅在插件通道需要时用它当子目录） |
-
-所以根目录刻意不放 `package.json` —— 一旦放上去，市场就把条目建成插件，并在 Skill 通道报
-`所选目录需要包含真实插件 package.json`。要发 Skill 就**别在根目录放包清单**。
+**只做 AI 生成/执行 PowerShell 时的运行期问题**，所以仓库就是一份纯 Skill：
 
 ```
-SKILL.md                     # 技能入口（市场解析 Frontmatter）
-scripts/                     # 工具链
-references/                  # 盲区与回灌模板
-plugin-shell/                # 可选：薄插件壳，不参与 Skill 发布
+SKILL.md        # 技能入口（市场按所选目录解析 Frontmatter）
+scripts/        # 工具链（文件模式 + -Inline 语句模式）
+references/     # 盲区、编码规则、报错回灌模板
 ```
 
-可选插件壳里 `package.json` 的 `version` 必须与根 `SKILL.md` 一致（`validate-skill.ps1` 与 CI 都会校验，不一致直接判不合规）。
+刻意不包含：`package.json`（会被市场判成插件）、插件壳、PowerShell 模块、GitHub Action。
+这些形态在别处也许有用，但它们服务的是"给别人安装"，与"修 AI 跑 pwsh 时的错"无关，放在这里只会把范围搞糊。
+
+**输入形态**
+
+| 形态 | 命令 |
+| --- | --- |
+| 脚本文件 | `ps-guard.ps1 目标.ps1 -Verify` |
+| 语句片段 | `ps-guard.ps1 -Inline '<语句>' -Verify` |
+| 管道 | `$stmt \| ps-guard.ps1 -Inline -` |
 
 ## 兼容性
 

@@ -1,6 +1,6 @@
 ---
 name: powershell-script-fixer
-version: 1.0.0
+version: 1.1.0
 category: ops
 author: YG
 description: PowerShell 脚本语法预检与全角标点/不可见字符自愈工具链，专治 AI 生成脚本的 ParseError、把 > 误当比较的静默丢输出与编码破坏；58 例回归（49+9），支持 -AsJson、一键闭环与发布自检。
@@ -19,10 +19,17 @@ userInvocable: true
 
 # PowerShell 脚本质检修复专家
 
+**范围：只修 AI 生成或直接执行的 PowerShell 脚本 / 语句的运行期问题。** 不做通用发布形态（插件、模块、Action），
+也不判断业务逻辑对错——那需要规格。这里解决的是：AI 把 pwsh 代码写"歪"了（全角标点、不可见字符、`>` 当比较、
+编码破坏），或者写了"语法合法但一跑就错"的东西。
+
 把「AI 生成的 PowerShell 脚本」从"看起来对"变成"能跑且没静默失败"的闭环工具链。
 首选入口 `ps-guard.ps1`（一条命令走完 预检→自愈→复检→试跑），底层是 `ps-lint.ps1`（只解析不执行的语法预检 + AST 符号比较检出）
-与 `fix-ps-punct.ps1`（tokenizer 保护区判定的全角标点/不可见字符自愈）；回归套件 `test-ps-tools.ps1`（49 例）与 `test-guard.ps1`（9 例）；
-`install.ps1` 负责装进 `.dsh/skills`。
+与 `fix-ps-punct.ps1`（tokenizer 保护区判定的全角标点/不可见字符自愈）；回归套件 `test-ps-tools.ps1`（49 例）、
+`test-guard.ps1`（9 例）、`test-inline.ps1`（8 例）；`install.ps1` 负责装进 `.dsh/skills`。
+
+**两种输入形态都要管**：落盘的 `.ps1` 文件，以及 AI 常直接执行的**语句/片段**（`-Inline`，或从标准输入管道读）。
+`-Inline` 内部走完全相同的闭环，结束时把修好的语句打回来，调用方直接重发即可。
 
 工具路径一律相对技能根目录解析：`<SKILL_DIR>\scripts\ps-lint.ps1`。
 下文所有命令按 Windows + PowerShell 7（`pwsh`）书写；跨平台时把 `<SKILL_DIR>` 换成技能安装目录即可（脚本本身是纯 PS 7，无 Windows API 依赖）。
@@ -34,6 +41,7 @@ userInvocable: true
 - 脚本里有零宽空格、全角空格、文件中段 BOM，肉眼看不出来、运行必炸。
 - 中文脚本被改坏编码（UTF-8 去 BOM 后在 Windows PowerShell 5.1 下按 GBK 解码成乱码）。
 - 需要在 CI / 批量流程里给一堆脚本做"可否执行"的门禁判断（退出码分层，可程序消费 `-AsJson`）。
+- AI 不落盘、直接跑一条 pwsh 语句（`pwsh -Command "..."`）—— 用 `-Inline`，同样能预检、自愈、试跑。
 - 修复后要证明"只改了标点、没动业务逻辑"（配合 diff 校验）。
 
 ## 执行工作流与检查清单
@@ -44,7 +52,14 @@ userInvocable: true
 
 ```powershell
 pwsh <SKILL_DIR>\scripts\ps-guard.ps1 目标.ps1 -Verify
+
+# 语句形态（AI 直接执行、不落盘）：同样一条命令，结束时打印修好的语句
+pwsh <SKILL_DIR>\scripts\ps-guard.ps1 -Inline 'if ($n > 0) { "x" }' -Verify
+$stmt | pwsh <SKILL_DIR>\scripts\ps-guard.ps1 -Inline -        # 从标准输入读（按字节 UTF-8 解码，中文安全）
 ```
+
+`-Inline` 返回的 JSON 是单个对象（`status / action / fixed / detail / exitCode`），`fixed` 直接拿去重发即可。
+临时文件与 `.bak` 会在结束时清掉，不在临时目录留垃圾。
 
 它内部按顺序做：`ps-lint` → 有语法错就 `fix-ps-punct` 自愈 → 复检 → 用 Stop 模式另起进程试跑，
 最后只回一个退出码和一句 ACTION：`0 通过 / 1 回灌重写 / 2 调用错误 / 3 需人工把 > 改成 -gt`。
@@ -107,8 +122,10 @@ pwsh -NoProfile -Command "$ErrorActionPreference='Stop'; & '目标.ps1'"
 ### 5. 回归自检（改工具本身、或换了环境后必做）
 
 ```powershell
-pwsh <SKILL_DIR>\scripts\test-ps-tools.ps1              # 49 例全跑，约 50s，exit 0 = 通过
+pwsh <SKILL_DIR>\scripts\test-ps-tools.ps1              # 49 例（文件模式），约 50s，exit 0 = 通过
 pwsh <SKILL_DIR>\scripts\test-ps-tools.ps1 -Case fix    # 只跑名字含 fix 的用例
+pwsh <SKILL_DIR>\scripts\test-guard.ps1                 # 9 例（一条命令闭环），约 15s
+pwsh <SKILL_DIR>\scripts\test-inline.ps1                # 8 例（-Inline / 标准输入），约 10s
 ```
 
 套件含两条自检：`-Case` 无匹配必须非 0、被测工具缺失必须非 0 —— 防"绿但一个测试都没跑"。
@@ -121,6 +138,7 @@ pwsh <SKILL_DIR>\scripts\test-ps-tools.ps1 -Case fix    # 只跑名字含 fix �
 - [ ] Stop 模式试跑通过（非 0 即视为失败）
 - [ ] 修复前后 `diff` 只有标点/空格级差异，业务逻辑零改动
 - [ ] 原始编码保持（中文脚本不要去掉 UTF-8 BOM）
+- [ ] 语句形态（不落盘）也要过一遍：`ps-guard.ps1 -Inline '<语句>' -Verify`
 - [ ] 仓库形态下（可选）：`pwsh scripts\install-hooks.ps1` 装好 pre-commit 门禁，改动 SKILL.md 后跑 `pwsh scripts\validate-skill.ps1`
 
 ## 输出格式规范与边界条件

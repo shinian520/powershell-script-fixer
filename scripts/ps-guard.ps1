@@ -1,22 +1,42 @@
-﻿<#
+<#
 .SYNOPSIS
     一条命令闭环：预检 -> 自愈 -> 复检 -> Stop 模式试跑，只回一个退出码与一句 ACTION。
 .DESCRIPTION
 ps-guard.ps1 - 一条命令完成「预检 -> 自愈 -> 复检 -> 试跑」的 PowerShell 脚本守卫
-用法: pwsh ps-guard.ps1 <file.ps1> [<file2.ps1> ...] [-NoFix] [-Verify] [-TimeoutSec 30] [-AsJson]
+
+用法:
+  pwsh ps-guard.ps1 <file.ps1> [<file2.ps1> ...] [-NoFix] [-Verify] [-TimeoutSec 30] [-AsJson]
+  pwsh ps-guard.ps1 -Inline "if ($x > 0) { 'a' }" [-Verify]     # AI 直接执行的语句
+  Get-Content x.ps1 -Raw | pwsh ps-guard.ps1 -Inline -           # 从标准输入读
+
 退出码: 0=通过（语法干净，试跑通过）
         1=需回灌重写（仍有语法错 / 试跑失败），报错已抓取，可直接贴回模型
-        2=读取/调用错误（路径不存在、传入目录、缺工具）
+        2=读取/调用错误（路径不存在、传入目录、缺工具、未给输入）
         3=需人工处理（检出 `>` 当比较用的写法，须改 -gt/-ge/-lt/-le）
-  多文件取最严重，优先级 2 > 1 > 3 > 0（与 ps-lint / fix-ps-punct 一致）。
+  多目标取最严重，优先级 2 > 1 > 3 > 0（与 ps-lint / fix-ps-punct 一致）。
 默认行为：发现语法错就调 fix-ps-punct 自愈；-NoFix 关闭自愈；-Verify 额外做 Stop 模式试跑。
+.PARAMETER Path
+    一个或多个 .ps1 路径。与 -Inline 二选一。
+.PARAMETER Inline
+    直接给一段语句/脚本文本；内部写入临时文件走同一条闭环，结束后打印修好的语句并删除临时文件。
+.PARAMETER NoFix
+    只诊断，不改文件。
+.PARAMETER Verify
+    额外用 Stop 模式另起进程试跑（抓"语法合法但运行期错"）。
+.PARAMETER TimeoutSec
+    试跑超时秒数，默认 30。
+.PARAMETER AsJson
+    结构化输出；-Inline 时返回单个对象（含 fixed 字段）。
 .EXAMPLE
     pwsh ps-guard.ps1 script.ps1 -Verify
+.EXAMPLE
+    pwsh ps-guard.ps1 -Inline 'if ($n > 0) { Write-Host ok }'
 #>
 # Write-Host 用于 CLI 人类可读输出（配合 exit code 供管道/CI 消费），属刻意使用
 [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSAvoidUsingWriteHost', '')]
 param(
-    [Parameter(Mandatory, Position = 0, ValueFromRemainingArguments = $true)][string[]]$Path,
+    [Parameter(Position = 0, ValueFromRemainingArguments = $true)][string[]]$Path,
+    [string]$Inline,
     [switch]$NoFix,
     [switch]$Verify,
     [int]$TimeoutSec = 30,
@@ -31,6 +51,30 @@ if ($PSVersionTable.PSVersion.Major -lt 7) {
 }
 
 $ErrorActionPreference = 'Stop'
+
+# -Inline：把语句写进临时文件，走完全相同的闭环；结束时打印修好的语句并删除临时文件。
+# 这样不必为"语句"再写一套解析/修复逻辑，语句与脚本的行为天然一致。
+$inlineTmp = $null
+$inlineMode = $false
+if ($Inline -eq '-' -and [Console]::IsInputRedirected) {
+    # 按字节读标准输入再显式按 UTF-8 解码：直接 [Console]::In.ReadToEnd() 会走控制台输入编码（常是 GBK），
+    # 导致管道传入的中文/全角字符变乱码（实测 "，" → "锛?"）。
+    $ms = [IO.MemoryStream]::new()
+    [Console]::OpenStandardInput().CopyTo($ms)
+    $bytes = $ms.ToArray()
+    try { $Inline = [Text.UTF8Encoding]::new($false, $true).GetString($bytes) }
+    catch { $Inline = [Console]::InputEncoding.GetString($bytes) }
+}
+if ($PSBoundParameters.ContainsKey('Inline') -and $Inline -ne '') {
+    $inlineMode = $true
+    $inlineTmp = Join-Path ([IO.Path]::GetTempPath()) ('psguard-inline-' + [guid]::NewGuid().ToString('N') + '.ps1')
+    [IO.File]::WriteAllText($inlineTmp, $Inline, [Text.UTF8Encoding]::new($false))
+    $Path = @($inlineTmp)
+}
+if (-not $Path) {
+    Write-Host 'ERROR: 需要给出文件路径，或用 -Inline 传入语句文本'
+    exit 2
+}
 
 $lintTool = Join-Path $PSScriptRoot 'ps-lint.ps1'
 $fixTool = Join-Path $PSScriptRoot 'fix-ps-punct.ps1'
@@ -182,21 +226,47 @@ foreach ($p in $Path) {
     if ($rank[$item.Status] -gt $worst) { $worst = $rank[$item.Status] }
 }
 
+# -Inline 收尾：把（可能已被自愈的）语句读回来，打印给调用方，并删除临时文件
+$inlineText = $null
+if ($inlineMode -and (Test-Path -LiteralPath $inlineTmp)) {
+    $inlineText = [IO.File]::ReadAllText($inlineTmp)
+    Remove-Item -LiteralPath $inlineTmp -Force -ErrorAction SilentlyContinue
+    # fix-ps-punct 会给临时文件留 .bak，内联模式下必须一并清掉，否则临时目录越积越多
+    Remove-Item -LiteralPath ($inlineTmp + '.bak') -Force -ErrorAction SilentlyContinue
+}
+
 if ($AsJson) {
-    $out = $results | ForEach-Object {
-        [pscustomobject]@{
-            path = $_.Path; status = $_.Status; action = $_.Action; detail = @($_.Detail)
+    if ($inlineMode) {
+        $r0 = $results[0]
+        Write-Output ([pscustomobject]@{
+                inline  = $true
+                status  = $r0.Status
+                action  = $r0.Action
+                fixed   = $inlineText
+                detail  = @($r0.Detail)
+                exitCode = $rankToExit[$worst]
+            } | ConvertTo-Json -Depth 4)
+    } else {
+        $out = $results | ForEach-Object {
+            [pscustomobject]@{
+                path = $_.Path; status = $_.Status; action = $_.Action; detail = @($_.Detail)
+            }
         }
+        Write-Output ($out | ConvertTo-Json -Depth 4)
     }
-    Write-Output ($out | ConvertTo-Json -Depth 4)
 } else {
     foreach ($r in $results) {
-        Write-Host ('{0}: {1}' -f $r.Status, $r.Path)
+        Write-Host ('{0}: {1}' -f $r.Status, $(if ($inlineMode) { '<inline>' } else { $r.Path }))
         if ($r.Action) { Write-Host ('      建议: ' + $r.Action) }
         foreach ($d in $r.Detail) { Write-Host ('      ' + $d) }
     }
+    if ($inlineMode -and $inlineText) {
+        Write-Host ''
+        Write-Host '修后语句:'
+        Write-Host $inlineText.TrimEnd()
+    }
     Write-Host ''
-    Write-Host ('汇总: 共 {0} 个文件，退出码 {1}（0 通过 / 1 回灌 / 2 调用错误 / 3 需人工改 -gt）' -f `
+    Write-Host ('汇总: 处理 {0} 项，退出码 {1}（0 通过 / 1 回灌 / 2 调用错误 / 3 需人工改 -gt）' -f `
             $results.Count, $rankToExit[$worst])
 }
 

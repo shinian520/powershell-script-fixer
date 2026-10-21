@@ -11,7 +11,7 @@ permissions:
   contents: read
 
 jobs:
-  # Windows 是主战场：全部 58 例（49 + 9）都在 pwsh 7.6.5 / Windows 上实测过
+  # Windows 是主战场：全部 66 例（49 + 9 + 8）都在 pwsh 7.6.5 / Windows 上实测过
   windows:
     runs-on: windows-latest
     timeout-minutes: 20
@@ -22,27 +22,9 @@ jobs:
         shell: pwsh
         run: $PSVersionTable.PSVersion.ToString()
 
-      - name: 发布规范自检（SKILL.md Frontmatter + 正文结构 + 插件壳）
+      - name: 发布规范自检（Frontmatter + 正文结构 + 根目录不得有 package.json）
         shell: pwsh
         run: ./scripts/validate-skill.ps1
-
-      - name: 插件壳校验（可选壳：plugin-shell/ 下的 package.json / main / bundle.patch / 版本对齐）
-        shell: pwsh
-        run: |
-          if (-not (Test-Path -LiteralPath ./plugin-shell/package.json)) {
-            Write-Host '未提供插件壳，跳过（纯 Skill 发布）'
-            exit 0
-          }
-          $pj = Get-Content ./plugin-shell/package.json -Raw | ConvertFrom-Json
-          if (-not $pj.name) { throw 'plugin-shell/package.json 缺少 name' }
-          if ($pj.version -notmatch '^\d+\.\d+\.\d+$') { throw "version 必须是精确 SemVer: $($pj.version)" }
-          $ver = (Select-String -Path ./SKILL.md -Pattern '^version:\s*(.+)$').Matches[0].Groups[1].Value.Trim()
-          if ($pj.version -ne $ver) { throw "版本不一致：SKILL.md=$ver / plugin-shell=$($pj.version)" }
-          if (-not (Test-Path -LiteralPath (Join-Path ./plugin-shell $pj.main))) { throw "main 指向不存在的文件: $($pj.main)" }
-          if (-not (Test-Path -LiteralPath (Join-Path ./plugin-shell $pj.dsh.bundle.patch))) { throw "bundle.patch 不存在: $($pj.dsh.bundle.patch)" }
-          node --check ./plugin-shell/lib/index.js
-          if (Test-Path -LiteralPath ./package.json) { throw '根目录不应有 package.json：Skill 形态会被市场判成插件' }
-          Write-Host "plugin shell OK: $($pj.name)@$($pj.version)"
 
       - name: 包内脚本语法门禁
         shell: pwsh
@@ -57,6 +39,10 @@ jobs:
       - name: 回归 / 一条命令闭环（9 例）
         shell: pwsh
         run: ./scripts/test-guard.ps1
+
+      - name: 回归 / -Inline 语句模式（8 例）
+        shell: pwsh
+        run: ./scripts/test-inline.ps1
 
       - name: 打发布包
         shell: pwsh
@@ -95,3 +81,5 @@ jobs:
         run: pwsh -NoProfile -File ./scripts/test-ps-tools.ps1
       - name: 回归 / 9 例
         run: pwsh -NoProfile -File ./scripts/test-guard.ps1
+      - name: 回归 / 8 例 inline
+        run: pwsh -NoProfile -File ./scripts/test-inline.ps1
