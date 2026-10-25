@@ -137,8 +137,11 @@ Stop 试跑：`pwsh -NoProfile -Command "$ErrorActionPreference='Stop'; & 'scrip
 
 | 形态 | 位置 | 用途 | 市场导入 |
 | --- | --- | --- | --- |
-| **Skill**（主） | 仓库根：`SKILL.md` + `scripts/` + `references/` | 模型自主唤醒，按规程执行 | 目录留空 |
-| **插件**（可选） | `plugin/`：`package.json` + `lib/index.js` + `patches/bundle.yaml` | 客户端命令 `psfix:*`，显式调用 | 子目录填 `plugin` |
+| **Skill**（主） | 仓库根：`SKILL.md` + `scripts/` + `references/` | 模型自主唤醒，按规程执行 | 分支 `main`，目录留空 |
+| **插件**（可选） | `plugin/`（另见 `plugin` 分支） | 客户端命令 `psfix:*`，显式调用 | 分支 `plugin` 目录留空；或分支 `main` + 子目录 `plugin` |
+
+> 插件通道会校验「所选目录含真实 `package.json`」。若导入时提示
+> `所选目录需要包含真实插件 package.json`，就是没指定目录：把**插件目录填 `plugin`**，或**改用 `plugin` 分支**（根目录已放 package.json）。
 
 插件不是空壳：`lib/index.js` 直接调 `scripts/*.ps1`，注册 `psfix:lint` / `psfix:fix` / `psfix:guard` / `psfix:version`，
 退出码原样透传。打包与自测：

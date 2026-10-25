@@ -30,8 +30,21 @@
 ## 打包
 
 ```powershell
-pwsh plugin\build.ps1        # 产出 dist\plugin\powershell-script-fixer\ 与 zip
+pwsh plugin\build.ps1        # 产出 <repo>\dist\plugin\powershell-script-fixer\（加 -Zip 出 ZIP）
 ```
+
+## 市场导入（两条路线，任选）
+
+导入插件时平台要求「所选目录含真实 `package.json`」。本仓库提供两种满足方式：
+
+| 路线 | 选的分支 | 插件目录 | 说明 |
+| --- | --- | --- | --- |
+| **A（最省事）** | `plugin` | **留空** | 该分支把 `package.json` 放在仓库根，目录留空即可通过 |
+| B（monorepo） | `main` | `plugin` | main 根是纯 Skill，插件在子目录，需显式填路径 |
+| C（离线） | — | — | 直接上传 Release 里的 `powershell-script-fixer-plugin-v<ver>.zip` |
+
+`plugin` 分支内容 = 本目录内容提升到根 + `scripts/` + `references/` + `SKILL.md`（插件运行依赖脚本，必须随包）。
+
 
 产物结构（符合指南的插件规范）：
 
