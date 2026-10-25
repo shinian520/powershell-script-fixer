@@ -1,6 +1,6 @@
 ---
 name: powershell-script-fixer
-version: 1.1.0
+version: 1.2.0
 category: ops
 author: YG
 description: PowerShell 脚本语法预检与全角标点/不可见字符自愈工具链，专治 AI 生成脚本的 ParseError、把 > 误当比较的静默丢输出与编码破坏；58 例回归（49+9），支持 -AsJson、一键闭环与发布自检。
@@ -83,6 +83,31 @@ pwsh <SKILL_DIR>\scripts\ps-lint.ps1 目标.ps1 -AsJson       # 给 CI / 程序�
 | 2 | 读不到文件（路径错/传目录/无权限） | 先修调用与路径，不是脚本的错 |
 | 3 | 无语法错误但检出符号比较（`>` 被当重定向） | 把 `>` 改成 `-gt/-ge/-lt/-le`，不改业务逻辑 |
 
+**报错细化（v1.2.0）**：每条错误给「分类 + 可疑字符码位 + 是否可自动修 + 建议动作 + 上下三行带列指示」，
+同一行的级联报错只展开一次，末尾给分类汇总。示例：
+
+```text
+FAIL: 2 处语法错误 - gen.ps1
+  L1C19: Unexpected token '，' in expression or statement.
+      分类: 全角/非 ASCII 标点  → fix-ps-punct 可自动修
+      可疑字符: '，' (U+FF0C)
+      建议: 把 '，'（U+FF0C）换成半角同形字符；fix-ps-punct 可自动修
+      1 | $m = 1
+      > $names = @("a.log"，
+        ^
+      3 |   "b.log"
+  L3C7: Missing '=' operator after key in hash literal.
+      分类: 哈希表语法
+      建议: @{ Key = Value } 必须用等号；冒号只属于 JSON。注意：把全角 ： 改成 : 仍然是错的，要改成 =
+  汇总: 全角/非 ASCII 标点 ×1、哈希表语法 ×1；其中 1 处可自动修（跑 fix-ps-punct）
+```
+
+`-AsJson` 的 `errors[]` 带 `category / hint / autoFixable / char / codePoint / lineHasFullWidth / context`，
+另有 `summary.byCategory` 与 `summary.autoFixable` —— agent 可以只读 `autoFixable` 决定"自己修"还是"回灌重写"。
+
+分类取值固定 8 种：`全角/非 ASCII 标点`、`括号/引号未闭合`、`哈希表语法`、`逗号后缺表达式`、
+`字符串未闭合`、`here-string 结束符`、`语法结构错`、`其他语法错`。
+
 ### 2. 全角标点 / 不可见字符自愈
 
 ```powershell
@@ -126,6 +151,7 @@ pwsh <SKILL_DIR>\scripts\test-ps-tools.ps1              # 49 例（文件模式�
 pwsh <SKILL_DIR>\scripts\test-ps-tools.ps1 -Case fix    # 只跑名字含 fix 的用例
 pwsh <SKILL_DIR>\scripts\test-guard.ps1                 # 9 例（一条命令闭环），约 15s
 pwsh <SKILL_DIR>\scripts\test-inline.ps1                # 8 例（-Inline / 标准输入），约 10s
+pwsh <SKILL_DIR>\scripts\test-hints.ps1                 # 6 例（报错分类/码位/上下文），约 8s
 ```
 
 套件含两条自检：`-Case` 无匹配必须非 0、被测工具缺失必须非 0 —— 防"绿但一个测试都没跑"。

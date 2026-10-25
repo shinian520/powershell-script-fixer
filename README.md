@@ -32,11 +32,12 @@ powershell-script-fixer/
 │   ├── install-hooks.ps1                 # 把上面的门禁装进当前 git 仓库（可 -Uninstall）
 │   ├── test-ps-tools.ps1                 # 49 例 lint/fix 边界回归
 │   ├── test-guard.ps1                    # 9 例 ps-guard 行为回归
-│   └── test-inline.ps1                   # 8 例 -Inline / 标准输入回归
+│   ├── test-inline.ps1                   # 8 例 -Inline / 标准输入回归
+│   └── test-hints.ps1                    # 6 例报错分类/码位/上下文回归
 ├── references/
 │   ├── known-blindspots.md               # 盲区、踩坑、编码规则、退出码、回归覆盖、版本沿革
 │   └── error-feedback-prompt.md          # 报错回灌模板 + 报错对照表 + 提示词硬规则
-├── .github/workflows/ci.yml              # CI：规范自检 + 66 例回归 + 产包上传
+├── .github/workflows/ci.yml              # CI：规范自检 + 72 例回归 + 产包上传
 ├── .gitattributes                        # `* -text`：禁止换行归一化（保字节级编码依据）
 └── .gitignore                            # dist/、*.bak、测试临时区
 ```
@@ -68,6 +69,7 @@ pwsh $S\fix-ps-punct.ps1 script.ps1 -All    # 语法合法也修（＄x = 1、�
 pwsh $S\test-ps-tools.ps1                   # 49 例回归，约 50s，exit 0 = 通过
 pwsh $S\test-guard.ps1                      # 9 例 guard 回归，约 15s
 pwsh $S\test-inline.ps1                     # 8 例 -Inline / stdin 回归，约 10s
+pwsh $S\test-hints.ps1                      # 6 例报错细化回归，约 8s
 
 # 语句形态（AI 直接执行、不落盘）
 pwsh $S\ps-guard.ps1 -Inline 'if ($n > 0) { "x" }' -Verify

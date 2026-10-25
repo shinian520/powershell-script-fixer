@@ -11,7 +11,7 @@ permissions:
   contents: read
 
 jobs:
-  # Windows 是主战场：全部 66 例（49 + 9 + 8）都在 pwsh 7.6.5 / Windows 上实测过
+  # Windows 是主战场：全部 72 例（49 + 9 + 8 + 6）都在 pwsh 7.6.5 / Windows 上实测过
   windows:
     runs-on: windows-latest
     timeout-minutes: 20
@@ -43,6 +43,10 @@ jobs:
       - name: 回归 / -Inline 语句模式（8 例）
         shell: pwsh
         run: ./scripts/test-inline.ps1
+
+      - name: 回归 / 报错细化（6 例）
+        shell: pwsh
+        run: ./scripts/test-hints.ps1
 
       - name: 打发布包
         shell: pwsh
@@ -83,3 +87,5 @@ jobs:
         run: pwsh -NoProfile -File ./scripts/test-guard.ps1
       - name: 回归 / 8 例 inline
         run: pwsh -NoProfile -File ./scripts/test-inline.ps1
+      - name: 回归 / 6 例 hints
+        run: pwsh -NoProfile -File ./scripts/test-hints.ps1
