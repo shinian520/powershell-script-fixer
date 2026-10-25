@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     PowerShell 语句/脚本语法预检：只解析不执行，报语法错（分类 + 码位 + 修法建议 + 上下文）与符号比较。
 .DESCRIPTION
@@ -46,14 +46,20 @@ param(
     [Parameter(Position = 0, ValueFromRemainingArguments = $true)][string[]]$Path,
     [string]$Inline,
     [switch]$Quiet,
-    [switch]$AsJson
+    [switch]$AsJson,
+    [switch]$AllowLegacy
 )
 
-# PowerShell 7 门禁：用运行时判断，不用 #Requires —— 后者在 5.1 下以 exit 1 中止，
-# 与"存在语法错误"的退出码撞车，CI 分不清"环境不对"和"脚本有错"。
+# 版本门禁：默认要求 PowerShell 7；只有 5.1 的机器可用 -AllowLegacy（或环境变量 PSFIX_ALLOW_LEGACY=1）降级运行。
+# 刻意不用 #Requires —— 它在 5.1 下直接以 exit 1 中止，会与"存在语法错误"的退出码撞车，CI 分不清。
 if ($PSVersionTable.PSVersion.Major -lt 7) {
-    Write-Host "ERROR: 需要 PowerShell 7+，当前 $($PSVersionTable.PSVersion)。这是调用环境问题（exit 2），不是脚本语法错误。"
-    exit 2
+    $legacyAllowed = ($AllowLegacy -eq $true) -or ($env:PSFIX_ALLOW_LEGACY -eq '1')
+    if (-not $legacyAllowed) {
+        Write-Host "ERROR: 需要 PowerShell 7+（当前 $($PSVersionTable.PSVersion)）。这是调用环境问题（exit 2），不是脚本语法错误。"
+        Write-Host '       目标机只有 5.1：加 -AllowLegacy 或设 PSFIX_ALLOW_LEGACY=1 降级运行；差异见 references/powershell-versions.md'
+        exit 2
+    }
+    Write-Host "WARN: 以 Windows PowerShell $($PSVersionTable.PSVersion) 降级运行（JSON 转义与启动开销可能与 7 不同）"
 }
 
 $ErrorActionPreference = 'Stop'

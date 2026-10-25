@@ -1,6 +1,6 @@
 ---
 name: powershell-script-fixer
-version: 1.1.0
+version: 1.1.1
 category: ops
 author: YG
 description: PowerShell 脚本语法预检与全角标点/不可见字符自愈工具链，专治 AI 生成脚本的 ParseError、把 > 误当比较的静默丢输出与编码破坏；72 例回归，支持 -AsJson、-Inline 语句与一键闭环。
@@ -47,6 +47,10 @@ $stmt | pwsh <SKILL_DIR>\scripts\ps-guard.ps1 -Inline -             # 管道（�
 只回一个退出码和一句 ACTION：**0 通过 / 1 回灌重写 / 2 调用错误 / 3 需改 -gt**。
 `-NoFix` 只诊断不改文件；`-TimeoutSec` 试跑超时（默认 30s，防 `Read-Host` 卡死）；`-AsJson` 供程序消费
 （语句模式返回单对象，含 `fixed` 修后语句）。
+
+**只有 5.1 的目标机**：三个工具都支持 `-AllowLegacy`（或设 `PSFIX_ALLOW_LEGACY=1`）降级运行，实测 lint/fix/guard 全可用；
+不加开关时 5.1 会 `exit 2` 并说明原因。5.1 的三个坑（BOM、参数引号、ExitCode 取不到）已修，详见
+`references/powershell-versions.md`。
 
 ### 1. 分步执行（需要逐条细节时才降级到这里）
 

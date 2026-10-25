@@ -32,6 +32,47 @@ jobs:
           $files = @(Get-ChildItem ./scripts -Filter *.ps1 | ForEach-Object { $_.FullName })
           ./scripts/ps-lint.ps1 @files
 
+      - name: 脚本编码断言（含中文的 .ps1 必须带 UTF-8 BOM，否则 5.1 按 ANSI 解码会解析失败）
+        shell: pwsh
+        run: |
+          $bad = @()
+          $files = @(Get-ChildItem ./scripts -Filter *.ps1)
+          foreach ($f in $files) {
+            $b = [IO.File]::ReadAllBytes($f.FullName)
+            $hasBom = ($b.Length -ge 3 -and $b[0] -eq 0xEF -and $b[1] -eq 0xBB -and $b[2] -eq 0xBF)
+            if (-not $hasBom) { $bad += $f.Name }
+          }
+          if ($bad.Count -gt 0) { throw "以下脚本缺少 UTF-8 BOM（5.1 下会解析失败）: $($bad -join ', ')" }
+          Write-Host "BOM OK: $($files.Count) 个脚本"
+
+      - name: 降级兼容（Windows PowerShell 5.1 + -AllowLegacy）
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $w = Join-Path $env:TEMP "legacy-ci-$PID"
+          New-Item -ItemType Directory -Force -Path $w | Out-Null
+          try {
+            $bad = Join-Path $w 'bad.ps1'
+            $body = '$a = @("x"' + [char]0xFF0C + ' "y")'
+            [IO.File]::WriteAllText($bad, $body, [Text.UTF8Encoding]::new($true))
+            $cmp = Join-Path $w 'cmp.ps1'
+            [IO.File]::WriteAllText($cmp, "`$n = 5`nif (`$n > 0) { 1 }", [Text.UTF8Encoding]::new($true))
+
+            & .\scripts\ps-lint.ps1 $bad -AllowLegacy | Out-Null
+            if ($LASTEXITCODE -ne 1) { throw "5.1 lint 全角应 exit 1，实际 $LASTEXITCODE" }
+            & .\scripts\ps-lint.ps1 $cmp -AllowLegacy | Out-Null
+            if ($LASTEXITCODE -ne 3) { throw "5.1 lint 符号比较应 exit 3，实际 $LASTEXITCODE" }
+            & .\scripts\ps-guard.ps1 $bad -AllowLegacy | Out-Null
+            if ($LASTEXITCODE -ne 0) { throw "5.1 guard 自愈应 exit 0，实际 $LASTEXITCODE" }
+            & .\scripts\ps-guard.ps1 $cmp -AllowLegacy | Out-Null
+            if ($LASTEXITCODE -ne 3) { throw "5.1 guard 符号比较应 exit 3，实际 $LASTEXITCODE" }
+            & .\scripts\ps-guard.ps1 $bad | Out-Null
+            if ($LASTEXITCODE -ne 2) { throw "5.1 未加 -AllowLegacy 应 exit 2，实际 $LASTEXITCODE" }
+            Write-Host "legacy 5.1 OK（lint 1/3、guard 0/3、无开关 exit 2）"
+          } finally {
+            Remove-Item -LiteralPath $w -Recurse -Force -ErrorAction SilentlyContinue
+          }
+
       - name: 回归 / 循环初版（49 例）
         shell: pwsh
         run: ./scripts/test-ps-tools.ps1

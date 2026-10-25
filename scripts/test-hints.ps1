@@ -1,4 +1,4 @@
-#Requires -Version 7
+﻿#Requires -Version 7
 <#
 .SYNOPSIS
     报错细化回归：分类 / 可疑字符码位 / 可自动修 / 建议 / 上下文 / 汇总。

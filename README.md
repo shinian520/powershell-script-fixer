@@ -37,6 +37,7 @@ powershell-script-fixer/
 ├── references/
 │   ├── known-blindspots.md               # 盲区、踩坑、编码规则、退出码、回归覆盖、版本沿革
 │   ├── error-reporting.md                # 报错分层：分类 / 码位 / 可自动修 / 上下文 / JSON 字段
+│   ├── powershell-versions.md            # 7 优先、5.1 降级（-AllowLegacy）与三个已修的 5.1 坑
 │   └── error-feedback-prompt.md          # 报错回灌模板 + 报错对照表 + 提示词硬规则
 ├── .github/workflows/ci.yml              # CI：规范自检 + 72 例回归 + 产包上传
 ├── .gitattributes                        # `* -text`：禁止换行归一化（保字节级编码依据）
@@ -154,6 +155,7 @@ references/     # 盲区、编码规则、报错回灌模板
 ## 兼容性
 
 - **PowerShell 7+**（脚本内运行时门禁）。用 5.1 调用会打印 `需要 PowerShell 7+` 并 **exit 2** —— 这是环境问题，不是脚本语法错误，别按 1 处理。
+- **只有 5.1 的机器**：加 `-AllowLegacy`（或设 `PSFIX_ALLOW_LEGACY=1`）降级运行，实测 lint/fix/guard/verify 全可用；差异见 `references/powershell-versions.md`。
 - 脚本文件必须保留 **UTF-8 BOM**：5.1 对无 BOM 的 UTF-8 会按 ANSI 解码中文注释 → 解析阶段就炸。批量改写脚本时别把 BOM 弄丢。
 - 只信 `pwsh -File` 的退出码；不要 dot-source 这些脚本（内部用 `exit`，会把调用者会话一起关掉）。
 - 每个脚本都有 `.SYNOPSIS/.DESCRIPTION/.EXAMPLE`，`Get-Help .\scripts\ps-guard.ps1 -Full` 可读。

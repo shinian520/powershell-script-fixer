@@ -1,4 +1,4 @@
-#Requires -Version 7
+﻿#Requires -Version 7
 <#
 .SYNOPSIS
     -Inline 模式回归：AI 直接执行的 pwsh 语句（不落盘）能否被同样地预检/自愈/试跑。

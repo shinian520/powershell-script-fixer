@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     发布前自检：校验 SKILL.md 的 YAML Frontmatter 与正文必备小节。
 .DESCRIPTION

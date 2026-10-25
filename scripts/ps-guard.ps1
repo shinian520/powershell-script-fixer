@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     一条命令闭环：预检 -> 自愈 -> 复检 -> Stop 模式试跑，只回一个退出码与一句 ACTION。
 .DESCRIPTION
@@ -40,14 +40,23 @@ param(
     [switch]$NoFix,
     [switch]$Verify,
     [int]$TimeoutSec = 30,
-    [switch]$AsJson
+    [switch]$AsJson,
+    [switch]$AllowLegacy
 )
 
-# PowerShell 7 门禁：用运行时判断，不用 #Requires —— 后者在 5.1 下以 exit 1 中止，
-# 与"存在语法错误"的退出码撞车，CI 分不清"环境不对"和"脚本有错"。
+# 版本门禁：默认要求 PowerShell 7；只有 5.1 的机器可用 -AllowLegacy（或环境变量 PSFIX_ALLOW_LEGACY=1）降级运行。
+# 刻意不用 #Requires —— 它在 5.1 下直接以 exit 1 中止，会与"存在语法错误"的退出码撞车，CI 分不清。
 if ($PSVersionTable.PSVersion.Major -lt 7) {
-    Write-Host "ERROR: 需要 PowerShell 7+，当前 $($PSVersionTable.PSVersion)。这是调用环境问题（exit 2），不是脚本语法错误。"
-    exit 2
+    $legacyAllowed = ($AllowLegacy -eq $true) -or ($env:PSFIX_ALLOW_LEGACY -eq '1')
+    if (-not $legacyAllowed) {
+        Write-Host "ERROR: 需要 PowerShell 7+（当前 $($PSVersionTable.PSVersion)）。这是调用环境问题（exit 2），不是脚本语法错误。"
+        Write-Host '       目标机只有 5.1：加 -AllowLegacy 或设 PSFIX_ALLOW_LEGACY=1 降级运行；差异见 references/powershell-versions.md'
+        exit 2
+    }
+    Write-Host "WARN: 以 Windows PowerShell $($PSVersionTable.PSVersion) 降级运行（JSON 转义与启动开销可能与 7 不同）"
+    # 让子工具（ps-lint / fix-ps-punct）也走降级，否则它们各自以 exit 2 拒绝，
+    # 会被本脚本误判成"调用错误"，把真实结果盖掉。
+    $env:PSFIX_ALLOW_LEGACY = '1'
 }
 
 $ErrorActionPreference = 'Stop'
@@ -116,33 +125,56 @@ function Invoke-Tool([string]$tool, [string[]]$toolArgs) {
 }
 
 function Invoke-ScriptVerify([string]$scriptPath, [int]$limitSec) {
-    $safe = $scriptPath -replace "'", "''"
-    $cmd = "& { `$ErrorActionPreference = 'Stop'; & '$safe' }"
     $tag = [guid]::NewGuid().ToString('N')
-    $outFile = Join-Path ([IO.Path]::GetTempPath()) "$tag.out"
-    $errFile = Join-Path ([IO.Path]::GetTempPath()) "$tag.err"
+    $tmpDir = [IO.Path]::GetTempPath()
+    $outFile = Join-Path $tmpDir "$tag.out"
+    $errFile = Join-Path $tmpDir "$tag.err"
+    $codeFile = Join-Path $tmpDir "$tag.code"
+    # 试跑脚本写成临时 .ps1 再用 -File 调用：5.1 的 Start-Process -ArgumentList 不会给含空格的
+    # 元素加引号，直接传 "-Command & { ... }" 会被截断，导致试跑永远"通过"（实测踩过）。
+    # 退出码由子进程写进哨兵文件：5.1 下 Start-Process -PassThru 的 ExitCode 常为空，
+    # 读它会把"成功"误判成失败（实测 ok.ps1 被判 RUNTIME_FAIL）。
+    $wrapper = Join-Path $tmpDir "$tag.verify.ps1"
+    $safePath = $scriptPath -replace "'", "''"
+    $nl2 = [Environment]::NewLine
+    $body = @(
+        "`$ErrorActionPreference = 'Stop'"
+        "`$exitCode = 0"
+        "try { & '$safePath' } catch { `$exitCode = 1; Write-Error `$_ }"
+        "[IO.File]::WriteAllText('$codeFile', [string]`$exitCode)"
+        "exit `$exitCode"
+    ) -join $nl2
+    [IO.File]::WriteAllText($wrapper, $body + $nl2, [Text.UTF8Encoding]::new($true))
     $timedOut = $false
     try {
-        # -NoNewWindow 只在 Windows 有意义；Linux/macOS 上传了会被忽略或报错，故按平台组装
         $spArgs = @{
             FilePath               = $pwshExe
-            ArgumentList           = @('-NoProfile', '-Command', $cmd)
+            ArgumentList           = ('-NoProfile -File "{0}"' -f $wrapper)
             PassThru               = $true
             RedirectStandardOutput = $outFile
             RedirectStandardError  = $errFile
         }
-        if ($IsWindows) { $spArgs['NoNewWindow'] = $true }
+        # -NoNewWindow 只在 Windows 上有意义；5.1 没有 $IsWindows 变量，按版本判定
+        $onWindows = ($PSVersionTable.PSVersion.Major -lt 7) -or $IsWindows
+        if ($onWindows) { $spArgs['NoNewWindow'] = $true }
         $proc = Start-Process @spArgs
         if (-not $proc.WaitForExit($limitSec * 1000)) {
             $timedOut = $true
             try { $proc.Kill($true) } catch { $null = $_ }
         }
-        $code = if ($timedOut) { 124 } else { $proc.ExitCode }
+        # 退出码只信哨兵文件：没有它说明子进程没跑到收尾（崩溃/被杀），按 1 处理
+        $code = 1
+        if ($timedOut) {
+            $code = 124
+        } elseif (Test-Path -LiteralPath $codeFile) {
+            $raw = (Get-Content -LiteralPath $codeFile -Raw -ErrorAction SilentlyContinue)
+            if ($raw -and $raw.Trim() -match '^\d+$') { $code = [int]$raw.Trim() }
+        }
         $stdout = if (Test-Path -LiteralPath $outFile) { @(Get-Content -LiteralPath $outFile -ErrorAction SilentlyContinue) } else { @() }
         $stderr = if (Test-Path -LiteralPath $errFile) { @(Get-Content -LiteralPath $errFile -ErrorAction SilentlyContinue) } else { @() }
         return [pscustomobject]@{ Code = $code; TimedOut = $timedOut; StdOut = @($stdout); StdErr = @($stderr) }
     } finally {
-        foreach ($f in @($outFile, $errFile)) {
+        foreach ($f in @($outFile, $errFile, $wrapper, $codeFile)) {
             if (Test-Path -LiteralPath $f) { Remove-Item -LiteralPath $f -Force -ErrorAction SilentlyContinue }
         }
     }

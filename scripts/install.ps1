@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     把本技能安装/更新到 .dsh/skills，自动解 MOTW 并做安装位自检。
 .DESCRIPTION
