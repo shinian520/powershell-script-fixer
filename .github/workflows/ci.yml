@@ -77,6 +77,8 @@ jobs:
           } finally {
             Remove-Item -LiteralPath $w -Recurse -Force -ErrorAction SilentlyContinue
           }
+          # 显式 exit 0：GitHub 的 pwsh 包装器会用最后一条原生命令的 $LASTEXITCODE 当步骤退出码
+          exit 0
 
       - name: 回归 / 循环初版（49 例）
         shell: pwsh
