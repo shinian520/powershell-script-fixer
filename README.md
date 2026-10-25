@@ -13,7 +13,7 @@ DeepSeek Harness 原生技能（Skill）包。**范围限定：只修 AI 生成�
 2. **静默失败**：`if ($x > 0)` 把 `>` 当重定向 —— 分支输出被丢弃、磁盘多出名为 `0` 的怪文件，而进程 `exit 0`。
 3. **不可见污染**：零宽空格、全角空格、文件中段 BOM、编码被改坏导致中文乱码。
 
-零编译、零依赖（仅需 PowerShell 7+），Markdown + 三个 `.ps1`。
+零编译、零依赖（仅需 PowerShell 7+）：`SKILL.md`（精简到 ~113 行）+ `scripts/` 下 10 个 `.ps1` + `references/` 按需加载的细节文档。
 
 ## 目录结构
 
@@ -36,6 +36,7 @@ powershell-script-fixer/
 │   └── test-hints.ps1                    # 6 例报错分类/码位/上下文回归
 ├── references/
 │   ├── known-blindspots.md               # 盲区、踩坑、编码规则、退出码、回归覆盖、版本沿革
+│   ├── error-reporting.md                # 报错分层：分类 / 码位 / 可自动修 / 上下文 / JSON 字段
 │   └── error-feedback-prompt.md          # 报错回灌模板 + 报错对照表 + 提示词硬规则
 ├── .github/workflows/ci.yml              # CI：规范自检 + 72 例回归 + 产包上传
 ├── .gitattributes                        # `* -text`：禁止换行归一化（保字节级编码依据）
@@ -110,6 +111,20 @@ Stop 试跑：`pwsh -NoProfile -Command "$ErrorActionPreference='Stop'; & 'scrip
 - 修复后复检不通过就不写回，不产生半损坏文件。
 - 写回沿用原文件编码（UTF-8±BOM / UTF-16LE / UTF-16BE）；GBK 输入不改写。
 - 0 处替换不写回、不建备份；`.bak` 已存在则改存带时间戳副本，绝不覆盖。
+
+## 技能体量（为什么 SKILL.md 很短）
+
+`SKILL.md` 是**每次加载都进上下文**的成本项，所以只留「范围 / 入口命令 / 退出码 / 检查清单 / 边界」。
+
+| 文件 | 行数 | 粗估 token | 何时进上下文 |
+| --- | --- | --- | --- |
+| `SKILL.md` | 113 | 1.6k–2.3k | 技能被唤醒时 |
+| `references/error-reporting.md` | 92 | 1.4k–2.0k | 需要看分类/JSON 字段时 |
+| `references/known-blindspots.md` | 116 | 3.0k–4.4k | 查盲区与实测结论时 |
+| `references/error-feedback-prompt.md` | 98 | 2.1k–3.0k | 要回灌重写时 |
+| `README.md` | 181 | 2.8k–4.0k | 人看，不进模型上下文 |
+
+原则：**决策留在 SKILL.md，证据与长样例下沉到 references**。改文档时别把细节搬回主文件。
 
 ## 已知边界
 
