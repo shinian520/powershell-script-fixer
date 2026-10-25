@@ -45,33 +45,39 @@ jobs:
           if ($bad.Count -gt 0) { throw "以下脚本缺少 UTF-8 BOM（5.1 下会解析失败）: $($bad -join ', ')" }
           Write-Host "BOM OK: $($files.Count) 个脚本"
 
-      - name: Legacy compatibility (Windows PowerShell 5.1 + -AllowLegacy)
-        shell: powershell
+      - name: Legacy compatibility (Windows PowerShell 5.1 as child process)
+        shell: pwsh
         run: |
-          $ErrorActionPreference = 'Stop'
+          # 用 pwsh 跑本步骤，把 5.1 当子进程调用：脚本内的 exit N 只影响子进程退出码。
+          # 若直接用 shell: powershell + & 脚本，脚本的 exit 会终止整个 CI 步骤（实测踩过）。
+          $ps51 = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
+          if (-not (Test-Path -LiteralPath $ps51)) { Write-Host 'no Windows PowerShell 5.1, skip'; exit 0 }
           $w = Join-Path $env:TEMP "legacy-ci-$PID"
           New-Item -ItemType Directory -Force -Path $w | Out-Null
           try {
             $bad = Join-Path $w 'bad.ps1'
-            $body = '$a = @("x"' + [char]0xFF0C + ' "y")'
-            [IO.File]::WriteAllText($bad, $body, [Text.UTF8Encoding]::new($true))
+            [IO.File]::WriteAllText($bad, ('$a = @("x"' + [char]0xFF0C + ' "y")'), [Text.UTF8Encoding]::new($true))
             $cmp = Join-Path $w 'cmp.ps1'
             [IO.File]::WriteAllText($cmp, "`$n = 5`nif (`$n > 0) { 1 }", [Text.UTF8Encoding]::new($true))
 
-            & .\scripts\ps-lint.ps1 $bad -AllowLegacy | Out-Null
-            if ($LASTEXITCODE -ne 1) { throw "PS5.1 lint fullwidth: expected exit 1, got $LASTEXITCODE" }
-            & .\scripts\ps-lint.ps1 $cmp -AllowLegacy | Out-Null
-            if ($LASTEXITCODE -ne 3) { throw "PS5.1 lint comparison: expected exit 3, got $LASTEXITCODE" }
-            & .\scripts\ps-guard.ps1 $bad -AllowLegacy | Out-Null
-            if ($LASTEXITCODE -ne 0) { throw "PS5.1 guard autofix: expected exit 0, got $LASTEXITCODE" }
-            & .\scripts\ps-guard.ps1 $cmp -AllowLegacy | Out-Null
-            if ($LASTEXITCODE -ne 3) { throw "PS5.1 guard comparison: expected exit 3, got $LASTEXITCODE" }
-            & .\scripts\ps-guard.ps1 $bad | Out-Null
-            if ($LASTEXITCODE -ne 2) { throw "PS5.1 without -AllowLegacy: expected exit 2, got $LASTEXITCODE" }
-            Write-Host "legacy 5.1 OK: lint 1/3, guard 0/3, no-flag 2"
+            $cases = @(
+              @{ Name = 'lint fullwidth';   Exe = './scripts/ps-lint.ps1';  Arg = $bad; Expect = 1; Extra = @('-AllowLegacy') },
+              @{ Name = 'lint comparison';  Exe = './scripts/ps-lint.ps1';  Arg = $cmp; Expect = 3; Extra = @('-AllowLegacy') },
+              @{ Name = 'guard autofix';    Exe = './scripts/ps-guard.ps1'; Arg = $bad; Expect = 0; Extra = @('-AllowLegacy') },
+              @{ Name = 'guard comparison'; Exe = './scripts/ps-guard.ps1'; Arg = $cmp; Expect = 3; Extra = @('-AllowLegacy') },
+              @{ Name = 'guard no-flag';    Exe = './scripts/ps-guard.ps1'; Arg = $bad; Expect = 2; Extra = @() }
+            )
+            foreach ($c in $cases) {
+              $argv = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', $c.Exe, $c.Arg) + $c.Extra
+              & $ps51 @argv *> $null
+              if ($LASTEXITCODE -ne $c.Expect) { throw "PS5.1 $($c.Name): expected exit $($c.Expect), got $LASTEXITCODE" }
+              Write-Host "  ok  $($c.Name) -> exit $LASTEXITCODE"
+            }
+            Write-Host 'legacy 5.1 OK: lint 1/3, guard 0/3, no-flag 2'
           } finally {
             Remove-Item -LiteralPath $w -Recurse -Force -ErrorAction SilentlyContinue
           }
+
       - name: 回归 / 循环初版（49 例）
         shell: pwsh
         run: ./scripts/test-ps-tools.ps1
