@@ -37,7 +37,7 @@ powershell-script-fixer/
 ├── references/
 │   ├── known-blindspots.md               # 盲区、踩坑、编码规则、退出码、回归覆盖、版本沿革
 │   ├── error-reporting.md                # 报错分层：分类 / 码位 / 可自动修 / 上下文 / JSON 字段
-│   ├── powershell-versions.md            # 7 优先、5.1 降级（-AllowLegacy）与三个已修的 5.1 坑
+│   ├── powershell-versions.md            # 7 优先、5.1 降级（-AllowLegacy）与四个已修的 5.1 坑
 │   └── error-feedback-prompt.md          # 报错回灌模板 + 报错对照表 + 提示词硬规则
 ├── .github/workflows/ci.yml              # CI：规范自检 + 72 例回归 + 产包上传
 ├── .gitattributes                        # `* -text`：禁止换行归一化（保字节级编码依据）

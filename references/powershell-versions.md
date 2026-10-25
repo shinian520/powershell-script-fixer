@@ -34,6 +34,9 @@ $env:PSFIX_ALLOW_LEGACY = '1'
 3. **`Start-Process -PassThru` 的 `ExitCode` 在 5.1 常为空**。读它会得到 `$null`，
    于是"成功"被判成失败（实测 `ok.ps1` 报 `RUNTIME_FAIL`）。现在子进程把退出码写进哨兵文件，
    父进程只读哨兵；超时按 124，没写哨兵按 1。
+4. **CI 里用 `shell: powershell` 的步骤，`run` 内容必须纯 ASCII**。GitHub 把 `run` 写成**无 BOM 的
+   UTF-8 临时 .ps1**，5.1 按 GBK 解码其中的中文 → 解析失败（实测报
+   `Unexpected token 'exit'`，日志里中文变 `å…¨è§’`）。断言消息写英文即可，与工具本身无关。
 
 ## 5.1 的能力边界（别指望）
 
