@@ -96,6 +96,13 @@ jobs:
         shell: pwsh
         run: ./scripts/test-hints.ps1
 
+      - name: 插件形态校验（node --check + 打包 + 9 例功能测试）
+        shell: pwsh
+        run: |
+          node --check ./plugin/lib/index.js
+          ./plugin/build.ps1 -Zip
+          node ./plugin/test.js --packaged ./dist/plugin/powershell-script-fixer
+          exit 0
       - name: 打发布包
         shell: pwsh
         run: |

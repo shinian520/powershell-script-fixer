@@ -1,0 +1,5 @@
+# patches/bundle.yaml
+# DeepSeek Harness 客户端 Bundle Patch 声明文件。
+# 本插件不侵入修改客户端核心代码：能力通过 lib/index.js 注册命令、转调 scripts/*.ps1 实现，
+# 因此保留标准空列表即可。市场校验要求该文件真实存在。
+[]

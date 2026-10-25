@@ -133,16 +133,23 @@ Stop 试跑：`pwsh -NoProfile -Command "$ErrorActionPreference='Stop'; & 'scrip
 
 ## 范围与形态
 
-**只做 AI 生成/执行 PowerShell 时的运行期问题**，所以仓库就是一份纯 Skill：
+**只做 AI 生成/执行 PowerShell 时的运行期问题**。仓库同时提供两种发行形态，能力来自同一套 `scripts/*.ps1`：
 
-```
-SKILL.md        # 技能入口（市场按所选目录解析 Frontmatter）
-scripts/        # 工具链（文件模式 + -Inline 语句模式）
-references/     # 盲区、编码规则、报错回灌模板
+| 形态 | 位置 | 用途 | 市场导入 |
+| --- | --- | --- | --- |
+| **Skill**（主） | 仓库根：`SKILL.md` + `scripts/` + `references/` | 模型自主唤醒，按规程执行 | 目录留空 |
+| **插件**（可选） | `plugin/`：`package.json` + `lib/index.js` + `patches/bundle.yaml` | 客户端命令 `psfix:*`，显式调用 | 子目录填 `plugin` |
+
+插件不是空壳：`lib/index.js` 直接调 `scripts/*.ps1`，注册 `psfix:lint` / `psfix:fix` / `psfix:guard` / `psfix:version`，
+退出码原样透传。打包与自测：
+
+```powershell
+pwsh plugin\build.ps1 -Zip          # 产出 dist\plugin\powershell-script-fixer-plugin-v<ver>.zip
+node plugin\test.js                 # 9 例（源码形态）
+node plugin\test.js --packaged .\dist\plugin\powershell-script-fixer   # 9 例（打包产物）
 ```
 
-刻意不包含：`package.json`（会被市场判成插件）、插件壳、PowerShell 模块、GitHub Action。
-这些形态在别处也许有用，但它们服务的是"给别人安装"，与"修 AI 跑 pwsh 时的错"无关，放在这里只会把范围搞糊。
+插件运行时按 `PSFIX_PWSH` → PATH 里的 `pwsh` → Windows PowerShell 5.1 的顺序解析，5.1 会自动追加 `-AllowLegacy`。
 
 **输入形态**
 
@@ -151,6 +158,7 @@ references/     # 盲区、编码规则、报错回灌模板
 | 脚本文件 | `ps-guard.ps1 目标.ps1 -Verify` |
 | 语句片段 | `ps-guard.ps1 -Inline '<语句>' -Verify` |
 | 管道 | `$stmt \| ps-guard.ps1 -Inline -` |
+| 插件命令 | `psfix:guard <file>` |
 
 ## 兼容性
 
